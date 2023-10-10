@@ -1,3 +1,3 @@
-[submodule "TestOpencv/vendor/spdlog"]
-	path = TestOpencv/vendor/spdlog
+[submodule "testopencv/vendor/spdlog"]
+	path = testopencv/vendor/spdlog
 	url = https://github.com/gabime/spdlog.git
