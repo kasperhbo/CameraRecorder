@@ -118,7 +118,7 @@ int main() {
 	double cofRight[3] = { -0.4190, 0.0780, -0.0460 };
 
 
-	cv::cuda::GpuMat map1LeftGPU, map2LeftGPU, map1RightGPU, map2
+	cv::cuda::GpuMat map1LeftGPU, map2LeftGPU, map1RightGPU, map2RightGPU;
 
 	map1Left.release();
 	map2Left.release();
@@ -136,13 +136,21 @@ int main() {
 		//one of the clips is finished
 		if (!clipLeft.read(frameLeft) || !clipRight.read(frameRight))
 		{
+			cout << "clip left or right is finished" << endl;
 			break;
 		}
+
+		//
 
 
 	}
 
 
+
+	map1LeftGPU.release();
+	map2LeftGPU.release();
+	map1RightGPU.release();
+	map2RightGPU.release();
 
 	frameLeft.release();
 	frameRight.release();
