@@ -12,6 +12,11 @@
 #include <cmath>
 #include "Log.h"
 
+#include <fstream> // Include this at the top of your file
+
+//make a timer
+#include <chrono>
+
 #include "Soc_VideoWriter.h"
 
 using namespace std;
@@ -34,6 +39,8 @@ int main() {
 	CORE_INFO("CUDA is available!");
 
 	const cv::String clipSaveName = "D:\\opencv\\assets\\final.h264";
+	
+	
 	const std::string clipSaveNameLocation = "D:\\opencv\\assets\\";
 	const std::string clipLeftName = "D:\\opencv\\assets\\Left_0009.mp4";
 	const std::string clipRightName = "D:\\OPENCV\\Assets\\Right_0009.mp4";
@@ -187,11 +194,15 @@ int main() {
 	cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, shift);
 	cv::cuda::GpuMat finalFrameGPU;
 
+	int length = clipLeft.get(cv::CAP_PROP_FRAME_COUNT);
+
+	double avgTime = 0.0; // to calculate average time for all frames
+	int frameCount = 0; // to keep track of the number of frames processed
+
 	while (true)
 	{
+		double startTicks = cv::getTickCount(); // start tick count
 		
-
-		currentFrame++;
 		//one of the clips is finished
 		if (!clipLeft.read(frameLeft))
 		{
@@ -199,7 +210,6 @@ int main() {
 
 			break;
 		}
-
 		if (!clipRight.read(frameRight))
 		{
 			CORE_INFO("Right clip is finished");
@@ -213,12 +223,6 @@ int main() {
 
 		cv::cuda::remap(frameLeftGPU, frameLeftGPU, mapLeftXGPU, mapLeftYGPU, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 		cv::cuda::remap(frameRightGPU, frameRightGPU, mapRightXGPU, mapRightYGPU, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
-
-		//translateImg(frameRightGPU, 0, shift);
-
-		//cv::Mat trans_mat = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, 2);
-		//warpaffina on gpu
-		//cv::cuda::warpAffine(frameRightGPU, frameRightGPU, trans_mat, frameRightGPU.size());						
 
 		//cv::cuda::GpuMat dst_gpu;
 		cv::Size dsize = cv::Size(frameRightGPU.cols, frameRightGPU.rows + shift);
@@ -236,11 +240,59 @@ int main() {
 		frameLeftGPU.release();
 		frameRightGPU.release();
 
-		if (currentFrame >= 2500)
-		{
-			CORE_INFO("Finished");
-			break;
-		}
+
+		double endTicks = cv::getTickCount(); // end tick count
+		double timeInSeconds = (endTicks - startTicks) / cv::getTickFrequency();
+
+	
+		//std::cout << "Time taken for frame " << frameCount << ": " << timeInSeconds << " seconds" << std::endl;
+		CORE_INFO("Time taken for frame {0}: {1} seconds", frameCount, timeInSeconds);
+
+		avgTime += timeInSeconds;
+		frameCount++;
+	}
+
+
+	avgTime /= frameCount;
+	std::cout << "Average time taken per frame: " << avgTime << " seconds" << std::endl;
+	// Get the current time point
+	auto now = std::chrono::system_clock::now();
+
+	// Convert it to a time_t object
+	std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+
+	// Use a safer method to get localtime based on the platform
+	std::tm localTime;
+
+#if defined(_WIN32) || defined(_WIN64)  // Windows-specific code
+	localtime_s(&localTime, &currentTime);
+#else  // POSIX-specific code
+	localtime_r(&currentTime, &localTime);
+#endif
+
+	// Use a stringstream to format the time into a string suitable for filenames
+	std::stringstream ss;
+	ss << localTime.tm_year + 1900 << "-"
+		<< localTime.tm_mon + 1 << "-"
+		<< localTime.tm_mday << "_"
+		<< localTime.tm_hour << "-"
+		<< localTime.tm_min << "-"
+		<< localTime.tm_sec << "_data.txt";
+
+	// Use the formatted time string as the filename
+	std::string filename = ss.str();
+
+	// Open an output file stream with the constructed filename
+	std::ofstream outFile(clipSaveNameLocation  + filename);
+
+	if (outFile.is_open()) {
+		outFile << "Resolution: " << finalResolutionW << "x" << finalResolutionH << std::endl;
+		outFile << "Average time taken per frame: " << avgTime << " seconds" << std::endl;
+			
+		outFile.close();
+	}
+	else {
+		std::cerr << "Unable to open file for writing." << std::endl;
 	}
 
 	//d_reader.release();

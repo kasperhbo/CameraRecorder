@@ -46,7 +46,7 @@ void SocVideoWriter::Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::Gpu
 	//cv::Mat resCPU;
 	try {
 		d_writer->write(result);
-		std::cout << "Writing frame done" << std::endl;
+		//std::cout << "Writing frame done" << std::endl;
 	}
 	catch (const cv::Exception e) {
 		std::cout << "Error writing frame" << std::endl;
