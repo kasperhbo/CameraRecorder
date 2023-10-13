@@ -1,76 +1,3 @@
-////#include <iostream>
-////
-//
-////
-////int main() {
-////    cv::VideoCapture clip("D:\\opencv\\assets\\compressed.mp4");
-////
-////    int fps = 1000 / 25;
-////
-////    if (!clip.isOpened()) {
-////        std::cerr << "Failed to open video file." << std::endl;
-////        return -1;
-////    }
-////
-////
-////    cv::Mat firstFrame;
-////    clip.read(firstFrame);
-////
-////    //cv::Mat first_frame;
-////    //clip.read(first_frame);
-////
-////    int ogw = firstFrame.cols;
-////    int ogh = firstFrame.rows;
-////
-////    std::cout << ogw << std::endl;
-////
-////    std::string window_name = "Fake Camera Controller";
-////    cv::namedWindow(window_name, cv::WINDOW_NORMAL);
-////
-////
-////    VideoController controller(ogw, ogh);
-////
-////    cv::Mat finalFrame;
-////
-////    while (true) {
-////
-////        if (!clip.read(finalFrame)) {
-////            break;
-////        }
-////
-////        finalFrame = controller.ProcessFrame(finalFrame);
-////
-////        //controller.ProcessFrame(finalFrame);
-////
-////        int key = cv::waitKey(20);
-////
-////        if (key == '+' || key == '=') {
-////            controller.cameraZoom *= 1.1;
-////        } else if (key == '-') {
-////            controller.cameraZoom /= 1.1;
-////        } else if (key == 'w') {
-////            controller.yShift -= static_cast<int>(10);
-////        } else if (key == 's') {
-////            controller.yShift += static_cast<int>(10);
-////        } else if (key == 'a') {
-////            controller.xShift -= static_cast<int>(10);
-////        } else if (key == 'd') {
-////            controller.xShift += static_cast<int>(10);
-////        } else if (key == 27) {
-////            break;
-////        }
-////        
-////        
-////        cv::imshow(window_name, finalFrame);
-////    }
-////
-////    finalFrame.release();
-////    clip.release();
-////    cv::destroyAllWindows();
-////
-////    return 0;
-////}
-////
 #include <opencv2/opencv.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
@@ -85,38 +12,11 @@
 #include <cmath>
 #include "Log.h"
 
+#include "Soc_VideoWriter.h"
+
 using namespace std;
 using namespace TestOpencv;
 
-//cv::Mat translateImg(cv::Mat & img, int offsetx, int offsety) {
-//	cv::Mat trans_mat = (cv::Mat_<double>(2, 3) << 1, 0, offsetx, 0, 1, offsety);
-//	warpAffine(img, img, trans_mat, img.size());	
-//	trans_mat.release();
-//	return img;
-//}
-//
-//cv::cuda::GpuMat translateImg(cv::cuda::GpuMat& img, int offsetx, int offsety) {
-//
-//	//d_img.upload(img);
-//
-//	cv::Mat trans_mat = (cv::Mat_<double>(2, 3) << 1, 0, offsetx, 0, 1, offsety);
-//	cv::cuda::warpAffine(img, img, trans_mat, img.size());
-//
-//	//d_result.download(img);
-//	return img;
-//}
-
-
-void custom_hconcat(const cv::cuda::GpuMat src1, const cv::cuda::GpuMat src2, cv::cuda::GpuMat& result) {
-
-	int size_cols = src1.cols + src2.cols;
-	int size_rows = std::max(src1.rows, src2.rows);
-	cv::cuda::GpuMat hconcat(size_rows, size_cols, src1.type());
-	src2.copyTo(hconcat(cv::Rect(0, 0, src2.cols, src2.rows)));
-	src1.copyTo(hconcat(cv::Rect(src2.cols, 0, src1.cols, src1.rows)));
-
-	result = hconcat.clone();
-}
 
 
 int main() {
@@ -133,12 +33,15 @@ int main() {
 	}
 	CORE_INFO("CUDA is available!");
 
-	const std::string clipSaveName = "D:\\opencv\\assets\\final.avi";
+	const cv::String clipSaveName = "D:\\opencv\\assets\\final.h264";
+	const std::string clipSaveNameLocation = "D:\\opencv\\assets\\";
 	const std::string clipLeftName = "D:\\opencv\\assets\\Left_0009.mp4";
 	const std::string clipRightName = "D:\\OPENCV\\Assets\\Right_0009.mp4";
 	
 	cv::VideoCapture clipLeft = cv::VideoCapture(clipLeftName);
 	cv::VideoCapture clipRight = cv::VideoCapture(clipRightName);
+	
+	std::cout << cv::getBuildInformation() << std::endl;
 
 	//check if the clip is open
 
@@ -160,19 +63,18 @@ int main() {
 	int originalHeight = firstFrame.rows;
 
 
-	int finalResolutionW = 4000;
-	int finalResolutionH = 3000;
+	int finalResolutionW = 8000;
+	int finalResolutionH = 6000;
 
 
 	//cv::CAP_OPENCV_MJPEG
-	cv::VideoWriter videoWriter = cv::VideoWriter(clipSaveName, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, cv::Size(finalResolutionW, finalResolutionH));
-	//cv::Ptr<cv::cudacodec::VideoWriter> d_writer;
-	//d_writer = cv::cudacodec::createVideoWriter(clipSaveName, cv::Size(finalResolutionW, finalResolutionH));
-	//const String& fileName, const Size frameSize,
+	//cv::VideoWriter videoWriter = cv::VideoWriter(clipSaveName, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, cv::Size(finalResolutionW, finalResolutionH));
 
-	cv::Ptr<cv::cudacodec::VideoReader> d_reader = cv::cudacodec::createVideoReader(clipLeftName);
-
+	SocVideoWriter videoWriter = SocVideoWriter(clipSaveName, 25.0, 4000, 3000);
+	
 	CORE_INFO("Original width: {0}, original height: {1}", originalWidth, originalHeight);
+		
+	//videoWriter.release();
 
 	float cofLeft[] = { -0.199f, -0.1300, -0.0150 };
 	float cofRight[] = { -0.4190, 0.0780, -0.0460 };
@@ -282,14 +184,13 @@ int main() {
 
 
 
-
-
 	cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, shift);
 	cv::cuda::GpuMat finalFrameGPU;
-	
 
 	while (true)
 	{
+		
+
 		currentFrame++;
 		//one of the clips is finished
 		if (!clipLeft.read(frameLeft))
@@ -305,7 +206,7 @@ int main() {
 
 			break;
 		}
-		
+
 		//remap on the gpu
 		frameLeftGPU.upload(frameLeft);
 		frameRightGPU.upload(frameRight);
@@ -329,28 +230,13 @@ int main() {
 		cv::cuda::remap(frameLeftGPU, frameLeftGPU, warpMatrixLeftMapXGPU,    warpMatrixLeftMapYGPU,  cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 		cv::cuda::remap(frameRightGPU, frameRightGPU, warpMatrixRightMapXGPU, warpMatrixRightMapYGPU, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 
-		// Create the transformation matrix for the shift operation
+		videoWriter.Write(frameLeftGPU, frameRightGPU, finalFrameGPU);
 
-		custom_hconcat(frameRightGPU, frameLeftGPU, finalFrameGPU);
 
 		frameLeftGPU.release();
 		frameRightGPU.release();
 
-
-		cv::cuda::resize(finalFrameGPU, finalFrameGPU, cv::Size(finalResolutionW, finalResolutionH));
-
-		finalFrameGPU.download(finalFrame);
-		
-
-		//cv::resize(finalFrame, finalFrame, cv::Size(1920, 1080));
-		videoWriter.write(finalFrame);
-		//d_writer->write(finalFrameGPU);
-	/*	cv::imshow("finalFrame", finalFrame);
-		cv::waitKey(10);*/
-		CORE_INFO("Current frame: {0}", currentFrame);
-
-
-		if (currentFrame >= 1000)
+		if (currentFrame >= 2500)
 		{
 			CORE_INFO("Finished");
 			break;
@@ -385,41 +271,9 @@ int main() {
 
 	clipLeft.release();
 	clipRight.release();
-	videoWriter.release();
+	//videoWriter.release();
 
 	cv::destroyAllWindows();
 
 	return 0;			
 }
-
-
-//int main() {
-//	
-//	cv::VideoCapture clip("D:\\opencv\\assets\\final.avi");
-//	clip.set(cv::CAP_PROP_FPS, 25);
-//	//clip.set(cv::CAP_PROP_FRAME_WIDTH,4000);
-//	//clip.set(cv::CAP_PROP_FRAME_HEIGHT,3000);
-//	clip.set(cv::CAP_FFMPEG, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
-//	std::cout << 'M' << 'J' << 'P' << 'G' << std::endl;
-//
-//	if (!clip.isOpened()) {
-//		std::cerr << "Failed to open video file." << std::endl;
-//		return -1;
-//	}
-//
-//	cv::Mat frame; 
-//
-//	while (true) {
-//		if (!clip.read(frame)) {
-//			std::cout << "Finished" << std::endl;
-//			break;
-//		}
-//		cv::resize(frame, frame, cv::Size(1920, 1080));
-//		cv::imshow("Video", frame);
-//		cv::waitKey(10);
-//	}
-//
-//	frame.release();
-//	clip.release();
-//	cv::destroyAllWindows();
-//}
