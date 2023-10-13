@@ -13,9 +13,10 @@ SocVideoWriter::SocVideoWriter(const cv::String  location, double fps, int width
 
 	if (d_writer.empty())
 	{
-		//std::cout << "Open CUDA Writer" << std::endl;
-		//const cv::String outputFilename = "output_gpu.h264";
-		d_writer = cv::cudacodec::createVideoWriter(location, cv::Size(widthres, heightres), cv::cudacodec::Codec::H264, fps, cv::cudacodec::ColorFormat::BGR, 0, stream);
+		
+		d_writer = cv::cudacodec::createVideoWriter(
+			location, cv::Size(widthres, heightres), cv::cudacodec::Codec::H264, fps, 
+			cv::cudacodec::ColorFormat::BGRA, 0, stream);
 		std::cout << "Writing to " << location << std::endl;
 	}
 }
@@ -45,11 +46,13 @@ void SocVideoWriter::Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::Gpu
 
 	//cv::Mat resCPU;
 	try {
+
 		d_writer->write(result);
 		//std::cout << "Writing frame done" << std::endl;
 	}
 	catch (const cv::Exception e) {
 		std::cout << "Error writing frame" << std::endl;
+		std::cout << e.what() << std::endl;
 		std::cout << e.msg << std::endl;
 	}
 	//result.download(resCPU);

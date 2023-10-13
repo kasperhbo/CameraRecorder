@@ -17,17 +17,30 @@
 //make a timer
 #include <chrono>
 
-#include "Soc_VideoWriter.h"
+//recording
+#include "Recording/Soc_VideoWriter.h"
+#include "Recording/Soc_VideoReader.h"
 
 using namespace std;
 using namespace TestOpencv;
 
+//TODO: MOVE TO UTILS THIS IS ALSO IN VIDEOWRITER
+void custom(const cv::cuda::GpuMat src1, const cv::cuda::GpuMat src2, cv::cuda::GpuMat& result)
+{
+	int size_cols = src1.cols + src2.cols;
+	int size_rows = std::max(src1.rows, src2.rows);
+	cv::cuda::GpuMat hconcat(size_rows, size_cols, src1.type());
+	src1.copyTo(hconcat(cv::Rect(0, 0, src1.cols, src1.rows)));
+	src2.copyTo(hconcat(cv::Rect(src1.cols, 0, src2.cols, src2.rows)));
+
+	result = hconcat.clone();
+}
 
 
 int main() {
 	Log::Init();
 
-	CORE_INFO("Welcome to vvoene analyzing software version {}.{}.{}  !", 0, 0, 1);
+	CORE_INFO("Welcome to kaspoehh analyzing software version {}.{}.{}  !", 0, 0, 1);
 	
 	bool hasCuda = cv::cuda::getCudaEnabledDeviceCount() > 0;
 	
@@ -38,46 +51,35 @@ int main() {
 	}
 	CORE_INFO("CUDA is available!");
 
+	bool saveVideo = false;
+	bool playingWithGui = true;
+
 	const cv::String clipSaveName = "D:\\opencv\\assets\\final.h264";
 	
 	
 	const std::string clipSaveNameLocation = "D:\\opencv\\assets\\";
 	const std::string clipLeftName = "D:\\opencv\\assets\\Left_0009.mp4";
 	const std::string clipRightName = "D:\\OPENCV\\Assets\\Right_0009.mp4";
-	
-	cv::VideoCapture clipLeft = cv::VideoCapture(clipLeftName);
-	cv::VideoCapture clipRight = cv::VideoCapture(clipRightName);
+
+	Soc_VideoReader videoReader = Soc_VideoReader(clipLeftName, clipRightName);
 	
 	std::cout << cv::getBuildInformation() << std::endl;
 
 	//check if the clip is open
 
-	if (!clipLeft.isOpened()) {
-		CORE_ERROR("Failed to open video file {0}.", clipLeftName);
-		return -1;
-	}
+	cv::cuda::GpuMat firstFrameLeft;
+	cv::cuda::GpuMat firstFrameRight;
 
-	if (!clipRight.isOpened()) {
-		CORE_ERROR("Failed to open video file {0}.", clipRightName);
-		return -1;
-	}
-
-	cv::Mat firstFrame;
-
-	clipLeft.read(firstFrame);
-
-	int originalWidth = firstFrame.cols;
-	int originalHeight = firstFrame.rows;
+	videoReader.Read(firstFrameLeft, firstFrameRight);
 
 
-	int finalResolutionW = 8000;
-	int finalResolutionH = 6000;
+	int originalWidth = firstFrameLeft.cols;
+	int originalHeight = firstFrameRight.rows;
 
+	int finalResolutionW = 1920;
+	int finalResolutionH = 1080;
 
-	//cv::CAP_OPENCV_MJPEG
-	//cv::VideoWriter videoWriter = cv::VideoWriter(clipSaveName, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, cv::Size(finalResolutionW, finalResolutionH));
-
-	SocVideoWriter videoWriter = SocVideoWriter(clipSaveName, 25.0, 4000, 3000);
+	SocVideoWriter videoWriter = SocVideoWriter(clipSaveName, 25.0, finalResolutionW, finalResolutionH);
 	
 	CORE_INFO("Original width: {0}, original height: {1}", originalWidth, originalHeight);
 		
@@ -86,7 +88,11 @@ int main() {
 	float cofLeft[] = { -0.199f, -0.1300, -0.0150 };
 	float cofRight[] = { -0.4190, 0.0780, -0.0460 };
 
-	cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) << 3000, 0, firstFrame.cols / 2, 0, 3000, firstFrame.rows / 2, 0, 0, 1);
+	cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) << 3000, 0, firstFrameLeft.cols / 2, 0, 3000, firstFrameLeft.rows / 2, 0, 0, 1);
+
+	//release
+	firstFrameLeft.release() ;
+	firstFrameRight.release();
 
 	//create the left maps
 	cv::Mat mapLeftX, mapLeftY;		
@@ -122,123 +128,194 @@ int main() {
 	//release camera matrix
 	cameraMatrix.release();
 
-	//create the frames mats for the clips
-	cv::Mat frameLeft;
-	cv::Mat frameRight;
-	cv::Mat finalFrame;
-
-	cv::Mat warpMatrixLeft;
-	cv::Mat warpMatrixRight;
-
 	//create the gpu mats for the frames
 	cv::cuda::GpuMat frameLeftGPU;
 	cv::cuda::GpuMat frameRightGPU;
 
 	cv::cuda::GpuMat mapLeftXGPU;
 	cv::cuda::GpuMat mapLeftYGPU;
+
 	mapLeftXGPU.upload(mapLeftX);
 	mapLeftYGPU.upload(mapLeftY);
 
 	cv::cuda::GpuMat mapRightXGPU;
 	cv::cuda::GpuMat mapRightYGPU;
+
 	mapRightXGPU.upload(mapRightX);
 	mapRightYGPU.upload(mapRightY);
 
-	int shift = 80;
 	int midShiftLeft = 310;
 	int midShiftRightTopLeft = 260;
 	int midShiftRightBottomLeft = 180;
-	int ab = abs(shift);
-
-
-	cv::Point2f srcPoints[4];
-	cv::Point2f dstPoints[4];
-
-	srcPoints[0] = cv::Point2f(0, 0);
-	srcPoints[1] = cv::Point2f(0, originalHeight);
-	srcPoints[2] = cv::Point2f(originalWidth, 0);
-	srcPoints[3] = cv::Point2f(originalWidth, originalHeight);
-
-	int currentFrame = 0;
-
-	//left
 	int shiftTotalHeightAdd = -700;
-	dstPoints[0] = cv::Point2f(0, 0 + shiftTotalHeightAdd);									//top left
-	dstPoints[1] = cv::Point2f(0, originalHeight);											//bottom left
-	dstPoints[2] = cv::Point2f(originalWidth, midShiftLeft + shiftTotalHeightAdd);			//top right
-	dstPoints[3] = cv::Point2f(originalWidth, originalHeight);								//bottom right
-	warpMatrixLeft = cv::getAffineTransform(srcPoints, dstPoints);
-	//cv::warpAffine(frameLeft, frameLeft, warpMatrixLeft, frameLeft.size());
-	//cv::cuda::buildWarpAffineMaps(warpMatrixLeft, false, cv::Size(originalWidth, originalHeight), mapLeftXGPU, mapLeftYGPU);
+
+
+	//warp points in images up or down so they allign and its full screen
 	cv::cuda::GpuMat warpMatrixLeftMapXGPU;
 	cv::cuda::GpuMat warpMatrixLeftMapYGPU;
-	
-	cv::cuda::buildWarpAffineMaps(warpMatrixLeft, false, cv::Size(originalWidth, originalHeight), warpMatrixLeftMapXGPU, warpMatrixLeftMapYGPU);
-	warpMatrixLeft.release();
-
-	//right
-	dstPoints[0] = cv::Point2f(0, midShiftRightTopLeft + shiftTotalHeightAdd); //top left
-	dstPoints[1] = cv::Point2f(0, originalHeight + midShiftRightBottomLeft);   //bottom left
-	dstPoints[2] = cv::Point2f(originalWidth, shiftTotalHeightAdd);		       //top right
-	dstPoints[3] = cv::Point2f(originalWidth, originalHeight);				   //bottom right
-	warpMatrixRight = cv::getAffineTransform(srcPoints, dstPoints);
 
 	cv::cuda::GpuMat warpMatrixRightMapXGPU;
 	cv::cuda::GpuMat warpMatrixRightMapYGPU;
 
-	cv::cuda::buildWarpAffineMaps(warpMatrixRight, false, cv::Size(originalWidth, originalHeight), warpMatrixRightMapXGPU, warpMatrixRightMapYGPU);
-	warpMatrixRight.release();
+	{
+		//left shift warp map
+		{
+			int offsetMidfield = 0;
+			cv::Point2f srcPointsLeft[4];
+			cv::Point2f dstPointsLeft[4];
+
+			srcPointsLeft[0] = cv::Point2f(0, 0);
+			srcPointsLeft[1] = cv::Point2f(0, originalHeight);
+			srcPointsLeft[2] = cv::Point2f(originalWidth, 0);
+
+			dstPointsLeft[0] = cv::Point2f(0, 0 + shiftTotalHeightAdd);									//top left
+			dstPointsLeft[1] = cv::Point2f(0, originalHeight - offsetMidfield);											//bottom right
+			dstPointsLeft[2] = cv::Point2f(originalWidth, midShiftLeft + shiftTotalHeightAdd);			//top right
+
+			cv::Mat warpMatrixLeft;
+			warpMatrixLeft = cv::getAffineTransform(srcPointsLeft, dstPointsLeft);
+
+			cv::cuda::buildWarpAffineMaps(warpMatrixLeft, false, cv::Size(originalWidth, originalHeight), warpMatrixLeftMapXGPU, warpMatrixLeftMapYGPU);
+			warpMatrixLeft.release();
+		}
 
 
+		//right shift warp map
+		{
+			cv::Point2f srcPoints[4];
+			cv::Point2f dstPoints[4];
 
-	cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, shift);
-	cv::cuda::GpuMat finalFrameGPU;
+			srcPoints[0] = cv::Point2f(0, 0);
+			srcPoints[1] = cv::Point2f(0, originalHeight);
+			srcPoints[2] = cv::Point2f(originalWidth, 0);
 
-	int length = clipLeft.get(cv::CAP_PROP_FRAME_COUNT);
+			dstPoints[0] = cv::Point2f(0, midShiftRightTopLeft + shiftTotalHeightAdd); //top left
+			dstPoints[1] = cv::Point2f(0, originalHeight + midShiftRightBottomLeft);   //bottom left
+			dstPoints[2] = cv::Point2f(originalWidth, shiftTotalHeightAdd);		       //top right
+
+			cv::Mat warpMatrixRight;
+			warpMatrixRight = cv::getAffineTransform(srcPoints, dstPoints);
+
+			cv::cuda::buildWarpAffineMaps(warpMatrixRight,
+				false, cv::Size(originalWidth, originalHeight), warpMatrixRightMapXGPU, warpMatrixRightMapYGPU);
+			warpMatrixRight.release();
+		}
+	}
+
 
 	double avgTime = 0.0; // to calculate average time for all frames
 	int frameCount = 0; // to keep track of the number of frames processed
 
+	int custom1 = 0;
+	int custom1_last = 0;
+	int custom2 = 0;
+	int custom2_last = 0;
+	int custom3 = 0;
+	int custom3_last = 0;
+	int custom4 = 0;
+	int custom4_last = 0;
+
+	//KDB Opencv : Custom1: 100, custom2 : -400, custom3 : 210, custom4 : 540
+	videoReader.ResetClips();
+
+	int currentFrame = 0;
+
+	cv::cuda::GpuMat mapRightFrameShiftX;
+	cv::cuda::GpuMat mapRightFrameShiftY;
+
+	//Calculate shift
+	{
+		int shift = 80;
+		int ab = abs(shift);
+
+		cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, shift);
+
+		cv::Size dsize = cv::Size(originalWidth, originalHeight + shift);
+
+		cv::cuda::buildWarpAffineMaps(
+			M, false, dsize, mapRightFrameShiftX, mapRightFrameShiftY
+		);
+	}
+
+
+	cv::Mat finalFrameCPU;
+	cv::cuda::GpuMat finalFrameGPU;
+
+	//TODO: Get frames from the video reader
+	int delay = 1000 / 25.0;
+
 	while (true)
 	{
 		double startTicks = cv::getTickCount(); // start tick count
+		clock_t startTime = clock();
 		
-		//one of the clips is finished
-		if (!clipLeft.read(frameLeft))
+		if (!videoReader.Read(frameLeftGPU, frameRightGPU))
 		{
-			CORE_INFO("Left clip is finished");
-
-			break;
-		}
-		if (!clipRight.read(frameRight))
-		{
-			CORE_INFO("Right clip is finished");
-
 			break;
 		}
 
-		//remap on the gpu
-		frameLeftGPU.upload(frameLeft);
-		frameRightGPU.upload(frameRight);
-
+		//remap so images are straight
 		cv::cuda::remap(frameLeftGPU, frameLeftGPU, mapLeftXGPU, mapLeftYGPU, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 		cv::cuda::remap(frameRightGPU, frameRightGPU, mapRightXGPU, mapRightYGPU, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 
-		//cv::cuda::GpuMat dst_gpu;
-		cv::Size dsize = cv::Size(frameRightGPU.cols, frameRightGPU.rows + shift);
 
-		// Apply the affine transformation using the GPU
-		cv::cuda::warpAffine(frameRightGPU, frameRightGPU, M, dsize, cv::BORDER_CONSTANT);
+		//Shift the right frame on the y axis
+		cv::cuda::remap(frameRightGPU, frameRightGPU, mapRightFrameShiftX, mapRightFrameShiftY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 
-
+		//Shift points in images up or down so they allign and its full screen
 		cv::cuda::remap(frameLeftGPU, frameLeftGPU, warpMatrixLeftMapXGPU,    warpMatrixLeftMapYGPU,  cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 		cv::cuda::remap(frameRightGPU, frameRightGPU, warpMatrixRightMapXGPU, warpMatrixRightMapYGPU, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 
-		videoWriter.Write(frameLeftGPU, frameRightGPU, finalFrameGPU);
+		if (saveVideo)
+		{
+			videoWriter.Write(frameLeftGPU, frameRightGPU, finalFrameGPU);
+		}
 
+		if (playingWithGui) {
+			custom(frameLeftGPU, frameRightGPU, finalFrameGPU);
+			cv::cuda::resize(finalFrameGPU, finalFrameGPU, cv::Size(finalResolutionW, finalResolutionH));
+			finalFrameGPU.download(finalFrameCPU);
+			cv::imshow("final", finalFrameCPU);
+			
+			int key = 0;
+			while (clock() - startTime < delay) {
+				key = cv::waitKey(1);
+			}
+			//q key
+			if (key == 113)
+			{
+				break;
+			}
 
-		frameLeftGPU.release();
-		frameRightGPU.release();
+			//convert ifs to switch
+			switch (key)
+			{
+			case 119: //W
+				custom1 += 10;
+				break;
+			case 115: //S
+				custom1 -= 10;
+				break;
+			case 101: //E
+				custom2 += 10;
+				break;
+			case 100: //d
+				custom2 -= 10;
+				break;
+			case 114: //R
+				custom3 += 10;
+				break;
+			case 102: //F
+				custom3 -= 10;
+				break;
+			case 116: //T
+				custom4 += 10;
+				break;
+			case 103: //G
+				custom4 -= 10;
+				break;
+			}
+		}
 
 
 		double endTicks = cv::getTickCount(); // end tick count
@@ -246,7 +323,7 @@ int main() {
 
 	
 		//std::cout << "Time taken for frame " << frameCount << ": " << timeInSeconds << " seconds" << std::endl;
-		CORE_INFO("Time taken for frame {0}: {1} seconds", frameCount, timeInSeconds);
+		//CORE_INFO("Time taken for frame {0}: {1} seconds", frameCount, timeInSeconds);
 
 		avgTime += timeInSeconds;
 		frameCount++;
@@ -295,12 +372,7 @@ int main() {
 		std::cerr << "Unable to open file for writing." << std::endl;
 	}
 
-	//d_reader.release();
 
-	//release all the memory
-	frameLeft.release();
-	frameRight.release();
-	finalFrame.release();
 
 	frameLeftGPU.release();
 	frameRightGPU.release();
@@ -313,16 +385,16 @@ int main() {
 
 	mapLeftXGPU.release();
 	mapLeftYGPU.release();
+
 	mapRightXGPU.release();
 	mapRightYGPU.release();
 
 	warpMatrixLeftMapXGPU.release();
 	warpMatrixLeftMapYGPU.release();
+
 	warpMatrixRightMapXGPU.release();
 	warpMatrixRightMapYGPU.release();
 
-	clipLeft.release();
-	clipRight.release();
 	//videoWriter.release();
 
 	cv::destroyAllWindows();

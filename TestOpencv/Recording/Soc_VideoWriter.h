@@ -24,7 +24,7 @@
 #include "opencv2/cudacodec.hpp"
 #include "opencv2/highgui.hpp"
 
-#include "Log.h"
+#include "../Log.h"
 
 using namespace std;
 using namespace TestOpencv;
