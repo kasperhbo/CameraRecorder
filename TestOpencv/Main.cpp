@@ -6,60 +6,37 @@
 #include <opencv2/cudafeatures2d.hpp>
 #include <opencv2/shape/shape_transformer.hpp>
 #include <opencv2/cudacodec.hpp>
-#include <vector>
-#include <chrono>
-#include <iostream>
-#include <cmath>
-#include "Log.h"
-
-#include <fstream> // Include this at the top of your file
-
-//make a timer
-#include <chrono>
 
 //recording
 #include "Recording/Soc_VideoWriter.h"
 #include "Recording/Soc_VideoReader.h"
 
+#include "Utils/CudaUtil.h"
+#include "Utils/TimeUtil.h"
+#include "Utils/Log.h"
+
 using namespace std;
 using namespace TestOpencv;
-
-//TODO: MOVE TO UTILS THIS IS ALSO IN VIDEOWRITER
-void custom(const cv::cuda::GpuMat src1, const cv::cuda::GpuMat src2, cv::cuda::GpuMat& result)
-{
-	int size_cols = src1.cols + src2.cols;
-	int size_rows = std::max(src1.rows, src2.rows);
-	cv::cuda::GpuMat hconcat(size_rows, size_cols, src1.type());
-	src1.copyTo(hconcat(cv::Rect(0, 0, src1.cols, src1.rows)));
-	src2.copyTo(hconcat(cv::Rect(src1.cols, 0, src2.cols, src2.rows)));
-
-	result = hconcat.clone();
-}
-
 
 int main() {
 	Log::Init();
 
 	CORE_INFO("Welcome to kaspoehh analyzing software version {}.{}.{}  !", 0, 0, 1);
 	
-	bool hasCuda = cv::cuda::getCudaEnabledDeviceCount() > 0;
-	
+	bool hasCuda = CudaUtil::IsCudaAvailable();
 	if (!hasCuda) {
 		//std::cout << "CUDA is not available!" << std::endl;
 		CORE_ERROR("CUDA is not available!");
 		return -1;
 	}
-	CORE_INFO("CUDA is available!");
 
-	bool saveVideo = false;
+	bool saveVideo = true;
 	bool playingWithGui = true;
 
-	const cv::String clipSaveName = "D:\\opencv\\assets\\final.h264";
-	
-	
-	const std::string clipSaveNameLocation = "D:\\opencv\\assets\\";
-	const std::string clipLeftName = "D:\\opencv\\assets\\Left_0009.mp4";
-	const std::string clipRightName = "D:\\OPENCV\\Assets\\Right_0009.mp4";
+	const std::string clipSaveNameLocation = "D:\\opencv\\assets\\saves\\";	
+	const cv::String clipSaveName = clipSaveNameLocation + TimeUtil::GetFormattedString() + "final.h264";
+	const std::string clipLeftName = "D:\\opencv\\assets\\Recordings\\Left_0009.mp4";
+	const std::string clipRightName = "D:\\OPENCV\\Assets\\Recordings\\Right_0009.mp4";
 
 	Soc_VideoReader videoReader = Soc_VideoReader(clipLeftName, clipRightName);
 	
@@ -79,7 +56,7 @@ int main() {
 	int finalResolutionW = 1920;
 	int finalResolutionH = 1080;
 
-	SocVideoWriter videoWriter = SocVideoWriter(clipSaveName, 25.0, finalResolutionW, finalResolutionH);
+	Soc_VideoWriter videoWriter = Soc_VideoWriter(clipSaveName, 25.0, finalResolutionW, finalResolutionH);
 	
 	CORE_INFO("Original width: {0}, original height: {1}", originalWidth, originalHeight);
 		
@@ -206,15 +183,6 @@ int main() {
 	double avgTime = 0.0; // to calculate average time for all frames
 	int frameCount = 0; // to keep track of the number of frames processed
 
-	int custom1 = 0;
-	int custom1_last = 0;
-	int custom2 = 0;
-	int custom2_last = 0;
-	int custom3 = 0;
-	int custom3_last = 0;
-	int custom4 = 0;
-	int custom4_last = 0;
-
 	//KDB Opencv : Custom1: 100, custom2 : -400, custom3 : 210, custom4 : 540
 	videoReader.ResetClips();
 
@@ -248,6 +216,8 @@ int main() {
 	{
 		double startTicks = cv::getTickCount(); // start tick count
 		clock_t startTime = clock();
+
+		CORE_INFO("Frame: {0}", frameCount);
 		
 		if (!videoReader.Read(frameLeftGPU, frameRightGPU))
 		{
@@ -272,7 +242,7 @@ int main() {
 		}
 
 		if (playingWithGui) {
-			custom(frameLeftGPU, frameRightGPU, finalFrameGPU);
+			CudaUtil::CustomHConcat(frameLeftGPU, frameRightGPU, finalFrameGPU);
 			cv::cuda::resize(finalFrameGPU, finalFrameGPU, cv::Size(finalResolutionW, finalResolutionH));
 			finalFrameGPU.download(finalFrameCPU);
 			cv::imshow("final", finalFrameCPU);
@@ -286,35 +256,6 @@ int main() {
 			{
 				break;
 			}
-
-			//convert ifs to switch
-			switch (key)
-			{
-			case 119: //W
-				custom1 += 10;
-				break;
-			case 115: //S
-				custom1 -= 10;
-				break;
-			case 101: //E
-				custom2 += 10;
-				break;
-			case 100: //d
-				custom2 -= 10;
-				break;
-			case 114: //R
-				custom3 += 10;
-				break;
-			case 102: //F
-				custom3 -= 10;
-				break;
-			case 116: //T
-				custom4 += 10;
-				break;
-			case 103: //G
-				custom4 -= 10;
-				break;
-			}
 		}
 
 
@@ -325,6 +266,11 @@ int main() {
 		//std::cout << "Time taken for frame " << frameCount << ": " << timeInSeconds << " seconds" << std::endl;
 		//CORE_INFO("Time taken for frame {0}: {1} seconds", frameCount, timeInSeconds);
 
+		if(frameCount > 100)
+		{
+			break;
+		}
+
 		avgTime += timeInSeconds;
 		frameCount++;
 	}
@@ -333,43 +279,18 @@ int main() {
 	avgTime /= frameCount;
 	std::cout << "Average time taken per frame: " << avgTime << " seconds" << std::endl;
 	// Get the current time point
-	auto now = std::chrono::system_clock::now();
+	{
+		// Open an output file stream with the constructed filename
+		std::ofstream outFile(clipSaveNameLocation + TimeUtil::GetFormattedString() + "log.txt");
 
-	// Convert it to a time_t object
-	std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
-
-	// Use a safer method to get localtime based on the platform
-	std::tm localTime;
-
-#if defined(_WIN32) || defined(_WIN64)  // Windows-specific code
-	localtime_s(&localTime, &currentTime);
-#else  // POSIX-specific code
-	localtime_r(&currentTime, &localTime);
-#endif
-
-	// Use a stringstream to format the time into a string suitable for filenames
-	std::stringstream ss;
-	ss << localTime.tm_year + 1900 << "-"
-		<< localTime.tm_mon + 1 << "-"
-		<< localTime.tm_mday << "_"
-		<< localTime.tm_hour << "-"
-		<< localTime.tm_min << "-"
-		<< localTime.tm_sec << "_data.txt";
-
-	// Use the formatted time string as the filename
-	std::string filename = ss.str();
-
-	// Open an output file stream with the constructed filename
-	std::ofstream outFile(clipSaveNameLocation  + filename);
-
-	if (outFile.is_open()) {
-		outFile << "Resolution: " << finalResolutionW << "x" << finalResolutionH << std::endl;
-		outFile << "Average time taken per frame: " << avgTime << " seconds" << std::endl;
-			
-		outFile.close();
-	}
-	else {
-		std::cerr << "Unable to open file for writing." << std::endl;
+		if (outFile.is_open()) {
+			outFile << "Resolution: " << finalResolutionW << "x" << finalResolutionH << std::endl;
+			outFile << "Average time taken per frame: " << avgTime << " seconds" << std::endl;
+			outFile.close();
+		}
+		else {
+			std::cerr << "Unable to open file for writing." << std::endl;
+		}
 	}
 
 

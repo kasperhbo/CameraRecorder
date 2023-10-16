@@ -26,8 +26,6 @@
 #include "opencv2/cudacodec.hpp"
 #include "opencv2/highgui.hpp"
 
-#include "../Log.h"
-
 class Soc_VideoReader
 {
 	public:

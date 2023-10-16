@@ -1,8 +1,12 @@
 #include "Soc_VideoWriter.h"
-	
 
-SocVideoWriter::SocVideoWriter(const cv::String  location, double fps, int widthres, int heightres)  : widthres(widthres), heightres(heightres)
-{
+#include "../Utils/CudaUtil.h"
+#include "../Utils/Log.h"
+
+using namespace TestOpencv;
+
+Soc_VideoWriter::Soc_VideoWriter(const cv::String  location, double fps, int widthres, int heightres)  : widthres(widthres), heightres(heightres)
+{	
 	cv::cuda::printShortCudaDeviceInfo(cv::cuda::getDevice());
 
 	cv::VideoWriter writer;
@@ -17,11 +21,12 @@ SocVideoWriter::SocVideoWriter(const cv::String  location, double fps, int width
 		d_writer = cv::cudacodec::createVideoWriter(
 			location, cv::Size(widthres, heightres), cv::cudacodec::Codec::H264, fps, 
 			cv::cudacodec::ColorFormat::BGRA, 0, stream);
-		std::cout << "Writing to " << location << std::endl;
+
+		CORE_INFO("Writing to {}", location);
 	}
 }
 
-SocVideoWriter::~SocVideoWriter()
+Soc_VideoWriter::~Soc_VideoWriter()
 {
 	d_writer.release();		
 }
@@ -33,14 +38,12 @@ SocVideoWriter::~SocVideoWriter()
 /// <param name="frameLeft"></param>
 /// <param name="frameRight"></param>
 /// <param name="result"></param>
-void SocVideoWriter::Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::GpuMat frameRight, cv::cuda::GpuMat& result)
+void Soc_VideoWriter::Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::GpuMat frameRight, cv::cuda::GpuMat& result)
 {
  
-	CustomHConcat(frameLeft, frameRight, result);
+	CudaUtil::CustomHConcat(frameLeft, frameRight, result);
 
-	/*std::cout << "Writing frame" << std::endl;
-	std::cout << "result width  size: " << / << std::endl;
-	std::cout << "result width  size: " << heightres << std::endl;*/
+	//CudaUtils::CustomHConcat(frameLeft, frameRight, result);
 
 	cv::cuda::resize(result, result, cv::Size(widthres, heightres));
 
@@ -51,30 +54,7 @@ void SocVideoWriter::Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::Gpu
 		//std::cout << "Writing frame done" << std::endl;
 	}
 	catch (const cv::Exception e) {
-		std::cout << "Error writing frame" << std::endl;
-		std::cout << e.what() << std::endl;
-		std::cout << e.msg << std::endl;
+		CORE_ERROR("Error writing frame: {}", e.msg);
 	}
-	//result.download(resCPU);
-
-	//writer.write(resCPU);		
-	
 }
 
-
-/// <summary>
-/// Stitch two images together horizontally
-/// </summary>
-/// <param name="src1">		</param>
-/// <param name="src2">		</param>
-/// <param name="result">	</param>
-void SocVideoWriter::CustomHConcat(const cv::cuda::GpuMat src1, const cv::cuda::GpuMat src2, cv::cuda::GpuMat& result)
-{
-	int size_cols = src1.cols + src2.cols;
-	int size_rows = std::max(src1.rows, src2.rows);
-	cv::cuda::GpuMat hconcat(size_rows, size_cols, src1.type());
-	src1.copyTo(hconcat(cv::Rect(0, 0, src1.cols, src1.rows)));
-	src2.copyTo(hconcat(cv::Rect(src1.cols, 0, src2.cols, src2.rows)));
-
-	result = hconcat.clone();
-}

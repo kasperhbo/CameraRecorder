@@ -1,6 +1,6 @@
 #include "Soc_VideoReader.h"
 
-#include "../Log.h"
+#include "../Utils/Log.h"
 
 using namespace TestOpencv;
 
@@ -56,17 +56,23 @@ clipRight.release();*/
 
 bool Soc_VideoReader::Read(cv::cuda::GpuMat& resultLeft, cv::cuda::GpuMat& resultRight)
 {
-	if (!d_readerLeft->nextFrame(resultLeft))
-	{
-		CORE_INFO("Left clip is finished");
-		return false;
-	}
-		
-	if (!d_readerRight->nextFrame(resultRight))
-	{
-		CORE_INFO("Left clip is finished");
-		return false;
-	}
+	try {
+		if (!d_readerLeft->nextFrame(resultLeft))
+		{
+			CORE_INFO("Left clip is finished");
+			return false;
+		}
 
-	return true;
+		if (!d_readerRight->nextFrame(resultRight))
+		{
+			CORE_INFO("Left clip is finished");
+			return false;
+		}
+
+		return true;
+	}
+	catch (const cv::Exception e) {
+		CORE_ERROR("Error reading frame: {}", e.msg);
+		return false;
+	}
 }

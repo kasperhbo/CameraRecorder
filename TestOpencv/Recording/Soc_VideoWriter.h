@@ -24,21 +24,15 @@
 #include "opencv2/cudacodec.hpp"
 #include "opencv2/highgui.hpp"
 
-#include "../Log.h"
-
 using namespace std;
-using namespace TestOpencv;
 
-class SocVideoWriter
+class Soc_VideoWriter
 {
 public:
-	SocVideoWriter(const std::string location, double fps, int widthres, int heightres);
-	~SocVideoWriter();
+	Soc_VideoWriter(const std::string location, double fps, int widthres, int heightres);
+	~Soc_VideoWriter();
 
 	void Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::GpuMat frameRight, cv::cuda::GpuMat& result);
-
-private:
-	void CustomHConcat(const cv::cuda::GpuMat src1, const cv::cuda::GpuMat src2, cv::cuda::GpuMat& result);
 
 private:
 	int widthres;
