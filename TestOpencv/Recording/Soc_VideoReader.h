@@ -32,6 +32,8 @@ class Soc_VideoReader
 		Soc_VideoReader(const cv::String locationLeft, const cv::String locationRight);
 		~Soc_VideoReader();
 
+		bool Initialize();
+
 		void ResetClips();
 
 		bool Read(cv::cuda::GpuMat& resultLeft, cv::cuda::GpuMat& resultRight);

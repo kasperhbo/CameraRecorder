@@ -13,34 +13,28 @@
 #include <iostream>
 #include <cmath>
 
-#include <iostream>
-
-#include "opencv2/opencv_modules.hpp"
-	
-#include <vector>
-#include <numeric>
-
-#include "opencv2/core.hpp"
-#include "opencv2/cudacodec.hpp"
-#include "opencv2/highgui.hpp"
+#include "../Utils/ImageUtil.h"
 
 using namespace std;
 
 class Soc_VideoWriter
 {
 public:
-	Soc_VideoWriter(const std::string location, double fps, int widthres, int heightres);
+	Soc_VideoWriter(cv::String location, int width, int height, int fps);
 	~Soc_VideoWriter();
 
-	void Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::GpuMat frameRight, cv::cuda::GpuMat& result);
+	bool Initialize();
+
+	void Write(cv::cuda::GpuMat& frameToShow);
 
 private:
-	int widthres;
-	int heightres;
+	int width;
+	int height;
 
-	/*cv::VideoWriter writer;*/
+	cv::String location;
+	int fps;
+
 	cv::Ptr<cv::cudacodec::VideoWriter> d_writer;
 
 	cv::cuda::Stream stream; 
-	
 };

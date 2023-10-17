@@ -53,15 +53,76 @@ public:
         return deviceInfo;
     }
 
-    static void CustomHConcat(const cv::cuda::GpuMat src1, const cv::cuda::GpuMat src2, cv::cuda::GpuMat& result)
-    {
-        int size_cols = src1.cols + src2.cols;
-        int size_rows = std::max(src1.rows, src2.rows);
-        cv::cuda::GpuMat hconcat(size_rows, size_cols, src1.type());
-        src1.copyTo(hconcat(cv::Rect(0, 0, src1.cols, src1.rows)));
-        src2.copyTo(hconcat(cv::Rect(src1.cols, 0, src2.cols, src2.rows)));
+    static void InitializeBarrelGPUMap(
+        const float distcofs[3],
+        cv::Mat& cameraMatrix, cv::cuda::GpuMat& resultX, cv::cuda::GpuMat& resultY, bool releaseCameraMatrix = false,
+        const int width = 4000, const int height = 4000) {
 
-        result = hconcat.clone();
+        cv::Mat distCoefs = (cv::Mat_<double>(1, 5) << distcofs[0], distcofs[1], distcofs[2], 0, 0);
+
+        cv::Mat resultXCPU;
+        cv::Mat resultYCPU;
+
+        cv::initUndistortRectifyMap(
+            cameraMatrix,
+            distCoefs,
+            cv::Mat(),
+            cameraMatrix,
+            cv::Size(width, height),
+            CV_32FC1,
+            resultXCPU,
+            resultYCPU
+        );
+
+        resultX.upload(resultXCPU);
+        resultY.upload(resultYCPU);
+
+        resultXCPU.release();
+        resultYCPU.release();
+        distCoefs.release();
+
+        if(releaseCameraMatrix)
+            cameraMatrix.release();
+    }
+    
+    static void Remap(cv::cuda::GpuMat& src, cv::cuda::GpuMat& dst, cv::cuda::GpuMat& mapX, cv::cuda::GpuMat& mapY) {
+        try {
+            cv::cuda::remap(src, dst, mapX, mapY, cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+        }
+        catch (cv::Exception& e) {
+			std::cout << e.what() << std::endl;
+			std::cout << e.msg << std::endl;
+		}
+	}
+
+    static void MakeWarpAffineMaps(
+        const cv::Point2f srcPoints[3], const cv::Point2f dstPoints[3],
+        cv::cuda::GpuMat& resultX, cv::cuda::GpuMat& resultY,
+        const int imageWidth, const int imageHeight) {
+
+        cv::Mat warpMatrixLeft;
+        warpMatrixLeft = cv::getAffineTransform(srcPoints, dstPoints);
+
+        cv::cuda::buildWarpAffineMaps(warpMatrixLeft, false, cv::Size(imageWidth, imageHeight), resultX, resultY);
+
+        
+        warpMatrixLeft.release();
+    }
+
+    static void MakeShiftYMap(int shift, int originalWidth, int originalHeight, cv::cuda::GpuMat &resultX, cv::cuda::GpuMat &resultY) {
+        cv::Mat M = (cv::Mat_<double>(2, 3) << 1, 0, 0, 0, 1, shift);
+
+        cv::Size dsize = cv::Size(originalWidth, originalHeight + shift);
+        try{
+            cv::cuda::buildWarpAffineMaps(
+				M, false, dsize, resultX, resultY
+			);
+		}
+        catch (cv::Exception& e) {
+			std::cout << e.what() << std::endl;
+		}   
+    
+        M.release();
     }
 
 };

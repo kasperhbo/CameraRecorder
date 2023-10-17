@@ -5,30 +5,45 @@
 
 using namespace TestOpencv;
 
-Soc_VideoWriter::Soc_VideoWriter(const cv::String  location, double fps, int widthres, int heightres)  : widthres(widthres), heightres(heightres)
+Soc_VideoWriter::Soc_VideoWriter(cv::String location, int width, int height, int fps) : 
+	location(location), width(width), height(height), fps(fps)
 {	
-	cv::cuda::printShortCudaDeviceInfo(cv::cuda::getDevice());
-
-	cv::VideoWriter writer;
-	//cv::Ptr<cv::cudacodec::VideoWriter> d_writer;
-
-	cv::Mat frame;
-	cv::cuda::GpuMat d_frame;
-
-	if (d_writer.empty())
-	{
-		
-		d_writer = cv::cudacodec::createVideoWriter(
-			location, cv::Size(widthres, heightres), cv::cudacodec::Codec::H264, fps, 
-			cv::cudacodec::ColorFormat::BGRA, 0, stream);
-
-		CORE_INFO("Writing to {}", location);
-	}
+	
 }
 
 Soc_VideoWriter::~Soc_VideoWriter()
 {
-	d_writer.release();		
+	CORE_INFO("Releasing writer");
+	d_writer.release();
+}
+
+
+bool Soc_VideoWriter::Initialize() 
+{
+	cv::cuda::printShortCudaDeviceInfo(cv::cuda::getDevice());
+
+	CORE_INFO("Initializing video writer");
+
+	if (d_writer.empty())
+	{
+		try {
+			d_writer = cv::cudacodec::createVideoWriter(
+				location, cv::Size(width, height), cv::cudacodec::Codec::H264, fps,
+				cv::cudacodec::ColorFormat::BGRA, 0, stream);
+
+			CORE_INFO("Writing to {} is finshed setting up", location);
+			return true;
+		}
+		catch (const cv::Exception e) {
+			CORE_ERROR("Error creating video writer: {}", e.msg);
+			return false;
+		}
+	}
+	else
+	{
+		CORE_WARN("Writer is not empty, make sure to release it before initializing");
+		return false;
+	}
 }
 
 
@@ -38,23 +53,47 @@ Soc_VideoWriter::~Soc_VideoWriter()
 /// <param name="frameLeft"></param>
 /// <param name="frameRight"></param>
 /// <param name="result"></param>
-void Soc_VideoWriter::Write(const cv::cuda::GpuMat frameLeft, const cv::cuda::GpuMat frameRight, cv::cuda::GpuMat& result)
+void Soc_VideoWriter::Write(cv::cuda::GpuMat& frameToShow)
 {
- 
-	CudaUtil::CustomHConcat(frameLeft, frameRight, result);
-
-	//CudaUtils::CustomHConcat(frameLeft, frameRight, result);
-
-	cv::cuda::resize(result, result, cv::Size(widthres, heightres));
-
-	//cv::Mat resCPU;
-	try {
-
-		d_writer->write(result);
-		//std::cout << "Writing frame done" << std::endl;
+	if (frameToShow.empty())
+	{
+		CORE_ERROR("Frame to show is empty");
+		return;
 	}
-	catch (const cv::Exception e) {
-		CORE_ERROR("Error writing frame: {}", e.msg);
+
+	if (d_writer.empty())
+	{
+		CORE_ERROR("Writer is empty, make sure its initialized");
+		return;
+	}
+
+	if (!ImageUtil::CheckResolution(frameToShow, width, height))
+	{
+		CORE_WARN("Frame to show is not the same size as the writer, resizing to match writer");
+
+		cv::cuda::GpuMat resGPU;
+		ImageUtil::ResizeImage(frameToShow, resGPU, width, height);
+
+		try {
+			d_writer->write(resGPU);
+		}
+		catch (const cv::Exception e) {
+			CORE_ERROR("Error writing frame: {}", e.msg);
+			return;
+		}
+		resGPU.release();
+
+
+
+	}
+	else {
+		try {
+			d_writer->write(frameToShow);
+		}
+		catch (const cv::Exception e) {
+			CORE_ERROR("Error writing frame: {}", e.msg);
+			return;
+		}
 	}
 }
 

@@ -4,22 +4,10 @@
 
 using namespace TestOpencv;
 
-Soc_VideoReader::Soc_VideoReader(const std::string locationLeft, const std::string locationRight)
+Soc_VideoReader::Soc_VideoReader(const cv::String locationLeft, const cv::String locationRight)
 	: locationLeft(locationLeft), locationRight(locationRight)
 {
-	try {
-		d_readerLeft = cv::cudacodec::createVideoReader(locationLeft);
-	}
-	catch (const cv::Exception e) {
-		CORE_ERROR("Error opening video reader: {}", e.msg); 
-	}
-
-	try {
-		d_readerRight = cv::cudacodec::createVideoReader(locationRight);
-	}
-	catch (const cv::Exception e) {
-		CORE_ERROR("Error opening video reader: {}", e.msg);
-	}		
+	
 }
 
 Soc_VideoReader::~Soc_VideoReader()
@@ -30,11 +18,31 @@ Soc_VideoReader::~Soc_VideoReader()
 	d_readerRight.release();
 }
 
+bool Soc_VideoReader::Initialize() {
+	try {
+		CORE_CRITICAL("Opening video reader");
+		d_readerLeft = cv::cudacodec::createVideoReader(locationLeft);
+	}
+	catch (const cv::Exception e) {
+		CORE_ERROR("Error opening video reader: {}", e.msg);
+		return false;
+	}
+
+	try {
+		CORE_CRITICAL("Opening video reader");
+		d_readerRight = cv::cudacodec::createVideoReader(locationRight);
+
+	}
+	catch (const cv::Exception e) {
+		CORE_ERROR("Error opening video reader: {}", e.msg);
+		return false;
+	}
+	return true;
+}
+
+
 void Soc_VideoReader::ResetClips()
 {
-
-	/*clipLeft.release();
-clipRight.release();*/
 	d_readerLeft.release();
 	d_readerRight.release();
 	try {

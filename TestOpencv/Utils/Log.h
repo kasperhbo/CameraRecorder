@@ -28,3 +28,4 @@ namespace TestOpencv
 #define CORE_WARN(...)     Log::GetCoreLogger()->warn(__VA_ARGS__)
 #define CORE_ERROR(...)    Log::GetCoreLogger()->error(__VA_ARGS__)
 #define CORE_CRITICAL(...) Log::GetCoreLogger()->critical(__VA_ARGS__)
+#define CORE_DEBUG(...)    Log::GetCoreLogger()->debug(__VA_ARGS__)
